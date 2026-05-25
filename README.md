@@ -21,53 +21,65 @@ A Cloud Run job runs every day at 00:05 Vietnam time and:
 ## Step 1 — Enable required APIs
 
 ```bash
-gcloud services enable run.googleapis.com cloudscheduler.googleapis.com monitoring.googleapis.com serviceconsumermanagement.googleapis.com serviceusage.googleapis.com --project translate-project-469204
+gcloud services enable run.googleapis.com cloudscheduler.googleapis.com monitoring.googleapis.com serviceconsumermanagement.googleapis.com serviceusage.googleapis.com --project YOUR_PROJECT_ID
 ```
 
 ---
 
-## Step 2 — Grant roles to the service account
+## Step 2 — Create a service account
 
-The job runs as `translate-quota-sa`. Grant it the roles it needs:
+Create a dedicated service account for the job to run as:
 
 ```bash
-gcloud projects add-iam-policy-binding translate-project-469204 --member="serviceAccount:translate-quota-sa@translate-project-469204.iam.gserviceaccount.com" --role="roles/monitoring.viewer" --project translate-project-469204
+gcloud iam service-accounts create YOUR_SERVICE_ACCOUNT --display-name="Translate Quota Adjuster" --project YOUR_PROJECT_ID
+```
 
-gcloud projects add-iam-policy-binding translate-project-469204 --member="serviceAccount:translate-quota-sa@translate-project-469204.iam.gserviceaccount.com" --role="roles/serviceusage.serviceUsageAdmin" --project translate-project-469204
+Replace `YOUR_SERVICE_ACCOUNT` with a name of your choice, e.g. `translate-quota-sa`.
+
+---
+
+## Step 3 — Grant roles to the service account
+
+Grant it the roles it needs:
+
+```bash
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID --member="serviceAccount:YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com" --role="roles/monitoring.viewer" --project YOUR_PROJECT_ID
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID --member="serviceAccount:YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com" --role="roles/serviceusage.serviceUsageAdmin" --project YOUR_PROJECT_ID
 ```
 
 ---
 
-## Step 3 — Build and push the container
+## Step 4 — Build and push the container
 
 From the folder containing `main.py`, `Dockerfile`, and `requirements.txt`:
 
 ```bash
-gcloud builds submit --tag gcr.io/translate-project-469204/translate-quota-adjuster --project translate-project-469204
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/translate-quota-adjuster --project YOUR_PROJECT_ID
 ```
 
 ---
 
-## Step 4 — Deploy as a Cloud Run job
+## Step 5 — Deploy as a Cloud Run job
 
 ```bash
-gcloud run jobs create translate-quota-adjuster --image gcr.io/translate-project-469204/translate-quota-adjuster --region asia-east1 --service-account translate-quota-sa@translate-project-469204.iam.gserviceaccount.com --set-env-vars GCP_PROJECT_ID=translate-project-469204 --max-retries 2 --project translate-project-469204
+gcloud run jobs create translate-quota-adjuster --image gcr.io/YOUR_PROJECT_ID/translate-quota-adjuster --region asia-east1 --service-account YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com --set-env-vars GCP_PROJECT_ID=YOUR_PROJECT_ID --max-retries 2 --project YOUR_PROJECT_ID
 ```
 
 To update after rebuilding:
 
 ```bash
-gcloud run jobs update translate-quota-adjuster --image gcr.io/translate-project-469204/translate-quota-adjuster:latest --region asia-east1 --project translate-project-469204
+gcloud run jobs update translate-quota-adjuster --image gcr.io/YOUR_PROJECT_ID/translate-quota-adjuster:latest --region asia-east1 --project YOUR_PROJECT_ID
 ```
 
 ---
 
-## Step 5 — Create the daily schedule
+## Step 6 — Create the daily schedule
 
 Runs every day at 00:05 ICT (Asia/Ho_Chi_Minh):
 
 ```bash
-gcloud scheduler jobs create http translate-quota-daily --location asia-east1 --schedule "5 0 * * *" --time-zone "Asia/Ho_Chi_Minh" --uri "https://asia-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/translate-project-469204/jobs/translate-quota-adjuster:run" --http-method POST --oauth-service-account-email translate-quota-sa@translate-project-469204.iam.gserviceaccount.com --project translate-project-469204
+gcloud scheduler jobs create http translate-quota-daily --location asia-east1 --schedule "5 0 * * *" --time-zone "Asia/Ho_Chi_Minh" --uri "https://asia-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/translate-quota-adjuster:run" --http-method POST --oauth-service-account-email YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com --project YOUR_PROJECT_ID
 ```
 
 ---
@@ -76,17 +88,17 @@ gcloud scheduler jobs create http translate-quota-daily --location asia-east1 --
 
 **Test-trigger the scheduler manually:**
 ```bash
-gcloud scheduler jobs run translate-quota-daily --location asia-east1 --project translate-project-469204
+gcloud scheduler jobs run translate-quota-daily --location asia-east1 --project YOUR_PROJECT_ID
 ```
 
 **Execute the Cloud Run job directly:**
 ```bash
-gcloud run jobs execute translate-quota-adjuster --region asia-east1 --project translate-project-469204
+gcloud run jobs execute translate-quota-adjuster --region asia-east1 --project YOUR_PROJECT_ID
 ```
 
 **Check logs from the last run:**
 ```bash
-gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=translate-quota-adjuster AND resource.labels.location=asia-east1" --limit 30 --project translate-project-469204 --order asc --format "value(textPayload)" --freshness=10m
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=translate-quota-adjuster AND resource.labels.location=asia-east1" --limit 30 --project YOUR_PROJECT_ID --order asc --format "value(textPayload)" --freshness=10m
 ```
 
 **Verify quota override in Cloud Console:**
